@@ -38,26 +38,22 @@ jobs:
         distribution: 'zulu'
         java-version: '8'
     - name: Syncing TWRP sources
-      env:
-        GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
       run: |
         mkdir ~/TWRP
         cd ~/TWRP
-        mkdir ~/.bin
-        curl http://commondatastorage.googleapis.com/git-repo-downloads/repo > ~/.bin/repo
-        # confirm the secret actually populated without ever printing it
-        echo "GITLAB_TOKEN length: ${#GITLAB_TOKEN}"
-        # credential store instead of URL-embedded token - repo's own internal
-        # URL handling during sync isn't guaranteed to carry an embedded
-        # oauth2:token@ the same way a plain git clone does, so auth via
-        # ~/.git-credentials instead, which any git call (repo's included)
-        # picks up automatically
-        git config --global credential.helper store
-        echo "https://oauth2:${GITLAB_TOKEN}@gitlab.com" > ~/.git-credentials
-        python3 ~/.bin/repo init --depth=1 -u https://gitlab.com/OrangeFox/Manifest.git -b fox_10.0
-        git clone --branch android-6.0 --single-branch https://github.com/notnoelchannel2/twrp_device_samsung_j3y17lte.git ~/TWRP/device/samsung/j3y17lte
-        python3 ~/.bin/repo sync -c --force-sync --optimized-fetch --no-tags --no-clone-bundle --prune -j$(nproc --all)
-        rm -f ~/.git-credentials
+        # gitlab.com/OrangeFox/Manifest.git no longer exists - OrangeFox
+        # dropped it along with fox_9.0/fox_10.0 support in their own sync
+        # tooling. This community script (DarthJabba9/XenonTheInertG,
+        # ofox-sync) rebuilds the same fox_10.0 tree from sources that are
+        # still live: the TWRP minimal-manifest on GitHub, patched, plus
+        # OrangeFox's bootable/Recovery and vendor/recovery repos at their
+        # fox_10.0 branch (both still exist on GitLab, just not through the
+        # retired Manifest.git shortcut).
+        git clone https://github.com/XenonTheInertG/ofox-sync.git ~/ofox-sync
+        cd ~/ofox-sync
+        chmod +x get_fox_10.sh
+        ./get_fox_10.sh ~/TWRP/fox_10.0
+        git clone --branch android-6.0 --single-branch https://github.com/notnoelchannel2/twrp_device_samsung_j3y17lte.git ~/TWRP/fox_10.0/device/samsung/j3y17lte
     - name: Downloading Magisk v30.7 for Fox Addons
       run: |
         mkdir -p ~/fox-addons
@@ -165,7 +161,7 @@ jobs:
         export PATH="$HOME/.jdk_7/java-se-7u75-ri/bin:$PATH"
         export JAVA_HOME="$HOME/.jdk_7/java-se-7u75-ri"
         export FOX_USE_SPECIFIC_MAGISK_ZIP="$HOME/fox-addons/Magisk-v30.7.zip"
-        cd ~/TWRP
+        cd ~/TWRP/fox_10.0
         source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
         export FOX_USE_TWRP_RECOVERY_IMAGE_BUILDER=1
@@ -191,7 +187,7 @@ jobs:
     - name: Repackaging OrangeFox zip
       id: repackage
       run: |
-        cd /home/runner/TWRP/out/target/product/j3y17lte
+        cd /home/runner/TWRP/fox_10.0/out/target/product/j3y17lte
         FOX_ZIP=$(find . -maxdepth 1 -iname "OrangeFox*.zip" | head -n1)
         if [ -z "$FOX_ZIP" ]; then
           echo "No OrangeFox zip found to repackage — skipping."
@@ -201,7 +197,7 @@ jobs:
           unzip -q "$FOX_ZIP" -d /tmp/fox_repack
           rm -f "$FOX_ZIP"
           cd /tmp/fox_repack
-          OUT_ZIP="/home/runner/TWRP/out/target/product/j3y17lte/$(basename "$FOX_ZIP")"
+          OUT_ZIP="/home/runner/TWRP/fox_10.0/out/target/product/j3y17lte/$(basename "$FOX_ZIP")"
           rm -f "$OUT_ZIP"
           zip -X -D "$OUT_ZIP" META-INF/com/google/android/updater-script META-INF/com/google/android/update-binary > /dev/null
           zip -r -X -D "$OUT_ZIP" META-INF -x "META-INF/com/google/android/updater-script" -x "META-INF/com/google/android/update-binary" > /dev/null
@@ -213,13 +209,13 @@ jobs:
       uses: actions/upload-artifact@v7
       with:
         name: ofrp
-        path: /home/runner/TWRP/out/target/product/j3y17lte/recovery.*
+        path: /home/runner/TWRP/fox_10.0/out/target/product/j3y17lte/recovery.*
         
     - name: Uploading OFRP ZIP build (installer, unzipped download)
       if: steps.repackage.outputs.zip_name != ''
       uses: actions/upload-artifact@v7
       with:
-        path: /home/runner/TWRP/out/target/product/j3y17lte/${{ steps.repackage.outputs.zip_name }}
+        path: /home/runner/TWRP/fox_10.0/out/target/product/j3y17lte/${{ steps.repackage.outputs.zip_name }}
         archive: false
 
     - name: Uploading extra theme zips
@@ -227,5 +223,5 @@ jobs:
       with:
         name: ofrp-extras
         path: |
-          /home/runner/TWRP/out/target/product/j3y17lte/*.zip
-          !/home/runner/TWRP/out/target/product/j3y17lte/${{ steps.repackage.outputs.zip_name }}
+          /home/runner/TWRP/fox_10.0/out/target/product/j3y17lte/*.zip
+          !/home/runner/TWRP/fox_10.0/out/target/product/j3y17lte/${{ steps.repackage.outputs.zip_name }}
