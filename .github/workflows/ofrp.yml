@@ -43,7 +43,7 @@ jobs:
         cd ~/TWRP
         mkdir ~/.bin
         curl http://commondatastorage.googleapis.com/git-repo-downloads/repo > ~/.bin/repo
-        python3 ~/.bin/repo init --depth=1 -u https://github.com/unlegacy-devices/fox-7.1_manifest.git -b fox-7.1
+        python3 ~/.bin/repo init --depth=1 -u https://gitlab.com/OrangeFox/Manifest.git -b fox_10.0
         git clone --branch android-6.0 --single-branch https://github.com/notnoelchannel2/twrp_device_samsung_j3y17lte.git ~/TWRP/device/samsung/j3y17lte
         python3 ~/.bin/repo sync -c --force-sync --optimized-fetch --no-tags --no-clone-bundle --prune -j$(nproc --all)
     - name: Downloading Magisk v30.7 for Fox Addons
