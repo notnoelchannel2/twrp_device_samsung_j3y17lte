@@ -45,10 +45,13 @@ jobs:
         cd ~/TWRP
         mkdir ~/.bin
         curl http://commondatastorage.googleapis.com/git-repo-downloads/repo > ~/.bin/repo
-        # gitlab.com now requires auth even for read access on some repos - repo
-        # (and any git call under it) picks this up via credential.helper instead
-        # of a URL-embedded token, so the token never shows up in process args or
-        # repo's own logging.
+        # confirm the secret actually populated without ever printing it
+        echo "GITLAB_TOKEN length: ${#GITLAB_TOKEN}"
+        # credential store instead of URL-embedded token - repo's own internal
+        # URL handling during sync isn't guaranteed to carry an embedded
+        # oauth2:token@ the same way a plain git clone does, so auth via
+        # ~/.git-credentials instead, which any git call (repo's included)
+        # picks up automatically
         git config --global credential.helper store
         echo "https://oauth2:${GITLAB_TOKEN}@gitlab.com" > ~/.git-credentials
         python3 ~/.bin/repo init --depth=1 -u https://gitlab.com/OrangeFox/Manifest.git -b fox_10.0
