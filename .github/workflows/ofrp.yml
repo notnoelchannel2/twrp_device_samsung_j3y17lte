@@ -51,6 +51,101 @@ jobs:
         mkdir -p ~/fox-addons
         curl -L -o ~/fox-addons/Magisk-v30.7.zip https://github.com/topjohnwu/Magisk/releases/download/v30.7/Magisk-v30.7.apk
         echo "Saved to ~/fox-addons/Magisk-v30.7.zip — build step points FOX_USE_SPECIFIC_MAGISK_ZIP at this file"
+    - name: Patching fox_list_apps for old and new layouts
+      run: |
+        TARGET=$(find ~/TWRP -type f -path "*FoxExtras/sbin/fox_list_apps" 2>/dev/null | head -n1)
+        if [ -z "$TARGET" ]; then
+          echo "fox_list_apps not found in synced source — skipping patch, App Manager list may stay broken."
+        else
+          echo "Patching: $TARGET"
+          cat > "$TARGET" << 'FOXLISTAPPS_EOF'
+        #!/sbin/sh
+        #
+        # Custom script for OrangeFox TWRP Recovery
+        # Copyright (C) 2018-2022 OrangeFox Recovery Project
+        #
+        # This software is licensed under the terms of the GNU General Public
+        # License version 2, as published by the Free Software Foundation, and
+        # may be copied, distributed, and modified under those terms.
+        #
+        # This program is distributed in the hope that it will be useful,
+        # but WITHOUT ANY WARRANTY; without even the implied warranty of
+        # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+        # GNU General Public License for more details.
+        #
+        # See <http://www.gnu.org/licenses/>.
+        #
+        # Please maintain this if you use this script or any part of it
+        #
+        # --- MODIFIED: find-based scan supports both flat (/data/app/<pkg>-<hash>/base.apk)
+        # --- and nested (/data/app/~~<hash>==/<pkg>-<hash>==/base.apk) layouts.
+        #
+
+        is_mounted() {
+          [ -z "$1" ] && { echo "0"; return; }
+          grep -q " `readlink -f $1` " /proc/mounts 2>/dev/null
+          [ "$?" = "1" ] && echo "0" || echo "1"
+        }
+
+        Do_Get_List() {
+        local AAPT1="/sbin/aapt"
+        local AAPT2="/sbin/aapt2"
+        local tmp="/tmp/listapps"
+        local list="$tmp/list"
+        local apps_dir="/data/app"
+        local namestr="application-label:'"
+        local d_mnt=$(is_mounted "/data")
+
+        	[ -d "$list" ] && return
+        	[ "$d_mnt" != "1" ] && mount /data
+
+        	mkdir -p "$tmp" "$list"
+
+        	if [ -f "$AAPT1" -o -f "$AAPT2" ]; then
+        	   AAPT="$AAPT1"
+        	   [ ! -f "$AAPT1" ] && AAPT="$AAPT2"
+        	   find "$apps_dir" -mindepth 1 -maxdepth 3 -name "base.apk" 2>/dev/null | while read -r apk; do
+        	       fullpath=$(dirname "$apk")
+        	       dirname_only=$(basename "$fullpath")
+        	       pkgname=$(echo "$dirname_only" | cut -d'-' -f1)
+        	       [ -z "$pkgname" ] && continue
+        	       name=$($AAPT dump badging "$apk" | grep "$namestr" | sed "s/"$namestr"//" | sed "s/'//" | sed "s/'//")
+        	       if [ -n "$name" -a -f "$list/$name" ]; then
+        		    echo "$fullpath" > "$list/$name ($pkgname)"
+        	       elif [ -n "$name" ]; then
+        		    echo "$fullpath" > "$list/$name"
+        	       else
+        		    echo "$fullpath" > "$list/$pkgname"
+        	       fi
+        	   done
+        	else
+        	   find "$apps_dir" -mindepth 1 -maxdepth 3 -name "base.apk" 2>/dev/null | while read -r apk; do
+        	       fullpath=$(dirname "$apk")
+        	       dirname_only=$(basename "$fullpath")
+        	       pkgname=$(echo "$dirname_only" | cut -d'-' -f1)
+        	       [ -z "$pkgname" ] && continue
+        	       echo "$fullpath" > "$list/$pkgname"
+        	   done
+        	fi
+
+        	exit 0
+        }
+
+        Do_Cleanup() {
+          exit 0
+        }
+
+        #
+        if [ "$1" = "--cleanup" ]; then
+           Do_Cleanup
+        else
+           Do_Get_List
+        fi
+        #
+        FOXLISTAPPS_EOF
+          chmod 755 "$TARGET"
+          echo "Patched fox_list_apps successfully"
+        fi
     - name: Building TWRP
       run: |
         OLDPATH=$PATH
