@@ -61,6 +61,16 @@ jobs:
         cat > "$TARGET" << 'FOXLISTAPPS_EOF'
         #!/sbin/sh
         # fox_list_apps - patched
+        #
+        # Confirmed from gui/theme/.../pages/advanced.xml (apps_list page): App
+        # Manager is a plain GUIFileSelector browsing amgr_path=/tmp/listapps/list.
+        # There is no text-file format to write - each installed app needs to be
+        # ONE entry (file, named however it should display) inside that directory.
+        # The original script wrote nothing there at all (broken ls/cut parsing),
+        # which is why the list was always empty regardless of what was installed.
+        #
+        # This version also scans /system/app and /system/priv-app in addition to
+        # /data/app, since the original only ever covered user-installed apps.
         
         FOXAAPT="/sbin/aapt"
         list_dir="/tmp/listapps/list"
@@ -184,6 +194,7 @@ jobs:
         export PATH=$OLDPATH
         export JAVA_HOME=$OLDJAVAHOME
     - name: Repackaging OrangeFox zip
+      id: repackage
       run: |
         cd /home/runner/TWRP/out/target/product/j3y17lte
         FOX_ZIP=$(find . -maxdepth 1 -iname "OrangeFox*.zip" | head -n1)
@@ -201,26 +212,25 @@ jobs:
           zip -r -X -D "$OUT_ZIP" META-INF -x "META-INF/com/google/android/updater-script" -x "META-INF/com/google/android/update-binary" > /dev/null
           zip -r -X -D "$OUT_ZIP" . -x "META-INF/*" > /dev/null
           echo "Repackaged $(basename "$FOX_ZIP") with META-INF first"
-          echo "FOX_ZIP_NAME=$(basename "$FOX_ZIP")" >> "$GITHUB_ENV"
+          echo "zip_name=$(basename "$FOX_ZIP")" >> "$GITHUB_OUTPUT"
         fi
     - name: Uploading TWRP builds
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v7
       with:
         name: ofrp
         path: /home/runner/TWRP/out/target/product/j3y17lte/recovery.*
         
     - name: Uploading OFRP ZIP build (installer, unzipped download)
-      if: env.FOX_ZIP_NAME != ''
-      uses: actions/upload-artifact@v5
+      if: steps.repackage.outputs.zip_name != ''
+      uses: actions/upload-artifact@v7
       with:
-        name: ${{ env.FOX_ZIP_NAME }}
-        path: /home/runner/TWRP/out/target/product/j3y17lte/${{ env.FOX_ZIP_NAME }}
+        path: /home/runner/TWRP/out/target/product/j3y17lte/${{ steps.repackage.outputs.zip_name }}
         archive: false
 
     - name: Uploading extra theme zips
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v7
       with:
         name: ofrp-extras
         path: |
           /home/runner/TWRP/out/target/product/j3y17lte/*.zip
-          !/home/runner/TWRP/out/target/product/j3y17lte/${{ env.FOX_ZIP_NAME }}
+          !/home/runner/TWRP/out/target/product/j3y17lte/${{ steps.repackage.outputs.zip_name }}
