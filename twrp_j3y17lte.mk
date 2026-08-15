@@ -15,7 +15,7 @@
 #
 
 # Release name
-PRODUCT_RELEASE_NAME := a3xelte
+PRODUCT_RELEASE_NAME := j3y17lte
 
 # Inherit from common AOSP config
 $(call inherit-product, $(SRC_TARGET_DIR)/product/base.mk)
@@ -27,10 +27,10 @@ $(call inherit-product, $(SRC_TARGET_DIR)/product/emulated_storage.mk)
 # Inherit some common TWRP stuff.
 $(call inherit-product, vendor/twrp/config/common.mk)
 
-PRODUCT_DEVICE       := a3xelte
-PRODUCT_NAME         := twrp_a3xelte
+PRODUCT_DEVICE       := j3y17lte
+PRODUCT_NAME         := twrp_j3y17lte
 PRODUCT_BRAND        := samsung
-PRODUCT_MODEL        := SM-A310F
+PRODUCT_MODEL        := SM-J330F
 PRODUCT_MANUFACTURER := samsung
-PRODUCT_RELEASE_NAME := Samsung Galaxy A3 (2016)
+PRODUCT_RELEASE_NAME := Samsung Galaxy J3 (2017)
 TARGET_VENDOR        := samsung
