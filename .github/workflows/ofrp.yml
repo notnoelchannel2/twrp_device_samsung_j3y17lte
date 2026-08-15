@@ -63,37 +63,30 @@ jobs:
         # fox_list_apps - patched
         #
         
-        FOXAAPT="/sbin/aapt"
         list_dir="/tmp/listapps/list"
         rm -rf /tmp/listapps
         mkdir -p "$list_dir"
         
-        # advanced.xml's apps_load page only does `mount /data` before calling this
-        # script - /system is not guaranteed mounted, so system-app scanning would
-        # silently find nothing without this. Try common mount points; ignore
-        # failures (already mounted, or a scheme where /system doesn't exist as a
-        # separate partition).
+        # advanced.xml's apps_load page only mounts /data before calling this
+        # script, so /system scanning would come back empty without this.
+        # Both calls can fail silently (already mounted, or no separate
+        # /system partition on this layout) - that's fine, ignore it.
         mount /system 2>/dev/null
         mount -o ro /system 2>/dev/null
         
-        # Check aapt availability ONCE, not per-app - this device has FOX_REMOVE_AAPT=1
-        # so it's always absent, but the per-app "[ -x ... ]" check was still forking
-        # a subshell every single call on top of everything else, adding up across
-        # hundreds of system apps.
-        HAVE_AAPT=0
-        [ -x "$FOXAAPT" ] && HAVE_AAPT=1
-        
+        # No aapt here - recovery doesn't run PackageManager, so there's no
+        # real label to fetch anyway. Package ID for everything, user and
+        # system alike, so what you see is what you'd target for backup/delete.
         add_entry() {
             local fullpath="$1"
             local tag="$2"
             local parent
             local pkgname
-            local label
             local display
         
-            # basename/dirname via parameter expansion instead of external
-            # `basename`/`dirname` calls - each app was forking two extra
-            # processes here for no reason, and this runs hundreds of times.
+            # parameter expansion instead of basename/dirname - saves two
+            # forks per app, which adds up once you're running this on
+            # hundreds of them
             local dir_only="${fullpath%/*}"
             parent="${dir_only##*/}"
             case "$parent" in
@@ -102,44 +95,29 @@ jobs:
             esac
             [ -z "$pkgname" ] && return
         
-            if [ "$HAVE_AAPT" = "1" ]; then
-                label="$("$FOXAAPT" dump badging "$fullpath" 2>/dev/null | grep "application-label:" | head -1 | cut -d"'" -f2)"
-            fi
-        
-            if [ -n "$label" ] && [ "$label" != "$pkgname" ]; then
-                if [ "$tag" = "system" ]; then
-                    display="[System] ${label} (${pkgname})"
-                else
-                    display="${label} (${pkgname})"
-                fi
+            if [ "$tag" = "system" ]; then
+                display="[System] ${pkgname}"
             else
-                # no aapt / no readable label - showing "pkgname (pkgname)" is
-                # redundant, just show the package name once
-                if [ "$tag" = "system" ]; then
-                    display="[System] ${pkgname}"
-                else
-                    display="${pkgname}"
-                fi
+                display="${pkgname}"
             fi
         
-            # filenames can't contain '/'; parameter expansion can't do global
-            # replace portably across shells, so this one stays as tr, but only
-            # runs if a '/' is actually present to avoid the fork otherwise
+            # filenames can't contain '/'. no portable way to global-replace
+            # with parameter expansion, so tr it is - but only when there's
+            # actually a slash to fix, no point forking otherwise
             case "$display" in
                 */*) display="$(echo "$display" | tr '/' '-')" ;;
             esac
         
-            # dedupe on package name so the same app isn't listed twice
+            # keyed on package name so the same app can't show up twice
             [ -e "$list_dir/$display" ] && return
         
-            # advanced.xml's delete action does:
+            # advanced.xml's delete action runs:
             #   rm -rf "$(cat "%amgr_file%")"
-            # so each entry file must CONTAIN the real path to remove, not be empty.
-            # For an app dir like /data/app/pkg-hash/base.apk, that's the pkg-hash
-            # folder one level up from base.apk. This applies to system apps too
-            # (/system/app, /system/priv-app) at the user's request - deleting a
-            # system app folder here CAN break boot if it's something init/SystemUI
-            # depends on. No extra confirmation beyond the normal swipe-to-confirm.
+            # so the entry file has to hold the real path, not be empty. For
+            # something like /data/app/pkg-hash/base.apk that's the pkg-hash
+            # folder, one level up. Same deal for system apps - deleting the
+            # wrong one here can break boot, and there's no extra confirmation
+            # beyond the usual swipe.
             echo "$dir_only" > "$list_dir/$display" 2>/dev/null
         }
         
@@ -154,11 +132,10 @@ jobs:
         
         scan_dir "/data/app" "user"
         
-        # System apps: try the flat AOSP-standard path first, then fall back to the
-        # nested layout some OEM builds use (confirmed on this device: the real
-        # system tree sits at /system/system/app, not /system/app directly - /system
-        # itself just mounts the OEM partition root, with system/product/vendor as
-        # subfolders inside it).
+        # try the flat AOSP path first, then the nested one some OEM builds
+        # use instead. Confirmed on this device: /system mounts the partition
+        # root, and the real tree lives one level down at /system/system/app,
+        # alongside product/vendor.
         scan_dir "/system/app" "system"
         scan_dir "/system/priv-app" "system"
         scan_dir "/system/system/app" "system"
