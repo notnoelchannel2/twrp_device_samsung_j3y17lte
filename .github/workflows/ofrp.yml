@@ -188,8 +188,12 @@ jobs:
           unzip -q "$FOX_ZIP" -d /tmp/fox_repack
           rm -f "$FOX_ZIP"
           cd /tmp/fox_repack
-          zip -r -X "/home/runner/TWRP/out/target/product/j3y17lte/$(basename "$FOX_ZIP")" . > /dev/null
-          echo "Repackaged $(basename "$FOX_ZIP")"
+          OUT_ZIP="/home/runner/TWRP/out/target/product/j3y17lte/$(basename "$FOX_ZIP")"
+          rm -f "$OUT_ZIP"
+          zip -X -D "$OUT_ZIP" META-INF/com/google/android/updater-script META-INF/com/google/android/update-binary > /dev/null
+          zip -r -X -D "$OUT_ZIP" META-INF -x "META-INF/com/google/android/updater-script" -x "META-INF/com/google/android/update-binary" > /dev/null
+          zip -r -X -D "$OUT_ZIP" . -x "META-INF/*" > /dev/null
+          echo "Repackaged $(basename "$FOX_ZIP") with META-INF first"
         fi
     - name: Uploading TWRP builds
       uses: actions/upload-artifact@v5
