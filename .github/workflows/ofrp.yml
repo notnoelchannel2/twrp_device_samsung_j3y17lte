@@ -147,8 +147,16 @@ jobs:
         }
         
         scan_dir "/data/app" "user"
+        
+        # System apps: try the flat AOSP-standard path first, then fall back to the
+        # nested layout some OEM builds use (confirmed on this device: the real
+        # system tree sits at /system/system/app, not /system/app directly - /system
+        # itself just mounts the OEM partition root, with system/product/vendor as
+        # subfolders inside it).
         scan_dir "/system/app" "system"
         scan_dir "/system/priv-app" "system"
+        scan_dir "/system/system/app" "system"
+        scan_dir "/system/system/priv-app" "system"
         
         exit 0
         FOXLISTAPPS_EOF
