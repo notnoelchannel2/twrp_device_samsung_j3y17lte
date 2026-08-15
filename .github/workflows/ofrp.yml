@@ -46,6 +46,17 @@ jobs:
         python3 ~/.bin/repo init --depth=1 -u https://github.com/unlegacy-devices/fox-7.1_manifest.git -b fox-7.1
         git clone --branch android-6.0 --single-branch https://github.com/notnoelchannel2/twrp_device_samsung_j3y17lte.git ~/TWRP/device/samsung/j3y17lte
         python3 ~/.bin/repo sync -c --force-sync --optimized-fetch --no-tags --no-clone-bundle --prune -j$(nproc --all)
+    - name: Swapping Fox Addons Magisk to latest
+      run: |
+        MAGISK_ZIP_PATH=$(find ~/TWRP -type f -path "*Fox/FoxFiles/Magisk.zip" 2>/dev/null | head -n1)
+        if [ -z "$MAGISK_ZIP_PATH" ]; then
+          echo "Magisk.zip not found under Fox/FoxFiles — skipping swap, build continues with whatever's bundled."
+        else
+          echo "Found bundled Magisk addon at: $MAGISK_ZIP_PATH"
+          curl -L -o /tmp/Magisk-latest.apk https://github.com/topjohnwu/Magisk/releases/download/v30.7/Magisk-v30.7.apk
+          cp /tmp/Magisk-latest.apk "$MAGISK_ZIP_PATH"
+          echo "Replaced with Magisk v30.7"
+        fi
     - name: Building TWRP
       run: |
         OLDPATH=$PATH
