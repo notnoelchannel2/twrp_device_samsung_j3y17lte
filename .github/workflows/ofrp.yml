@@ -77,6 +77,14 @@ jobs:
         rm -rf /tmp/listapps
         mkdir -p "$list_dir"
         
+        # advanced.xml's apps_load page only does `mount /data` before calling this
+        # script - /system is not guaranteed mounted, so system-app scanning would
+        # silently find nothing without this. Try common mount points; ignore
+        # failures (already mounted, or a scheme where /system doesn't exist as a
+        # separate partition).
+        mount /system 2>/dev/null
+        mount -o ro /system 2>/dev/null
+        
         add_entry() {
             local fullpath="$1"
             local tag="$2"
@@ -95,12 +103,21 @@ jobs:
             if [ -x "$FOXAAPT" ]; then
                 label="$("$FOXAAPT" dump badging "$fullpath" 2>/dev/null | grep "application-label:" | head -1 | cut -d"'" -f2)"
             fi
-            [ -z "$label" ] && label="$pkgname"
         
-            if [ "$tag" = "system" ]; then
-                display="[System] ${label} (${pkgname})"
+            if [ -n "$label" ] && [ "$label" != "$pkgname" ]; then
+                if [ "$tag" = "system" ]; then
+                    display="[System] ${label} (${pkgname})"
+                else
+                    display="${label} (${pkgname})"
+                fi
             else
-                display="${label} (${pkgname})"
+                # no aapt / no readable label - showing "pkgname (pkgname)" is
+                # redundant, just show the package name once
+                if [ "$tag" = "system" ]; then
+                    display="[System] ${pkgname}"
+                else
+                    display="${pkgname}"
+                fi
             fi
         
             # filenames can't contain '/'; strip anything odd just in case a label has it
