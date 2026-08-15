@@ -201,6 +201,7 @@ jobs:
           zip -r -X -D "$OUT_ZIP" META-INF -x "META-INF/com/google/android/updater-script" -x "META-INF/com/google/android/update-binary" > /dev/null
           zip -r -X -D "$OUT_ZIP" . -x "META-INF/*" > /dev/null
           echo "Repackaged $(basename "$FOX_ZIP") with META-INF first"
+          echo "FOX_ZIP_NAME=$(basename "$FOX_ZIP")" >> "$GITHUB_ENV"
         fi
     - name: Uploading TWRP builds
       uses: actions/upload-artifact@v5
@@ -208,8 +209,18 @@ jobs:
         name: ofrp
         path: /home/runner/TWRP/out/target/product/j3y17lte/recovery.*
         
-    - name: Uploading OFRP ZIP builds
+    - name: Uploading OFRP ZIP build (installer, unzipped download)
+      if: env.FOX_ZIP_NAME != ''
       uses: actions/upload-artifact@v5
       with:
-        name: ofrpzip
-        path: /home/runner/TWRP/out/target/product/j3y17lte/*.zip
+        name: ${{ env.FOX_ZIP_NAME }}
+        path: /home/runner/TWRP/out/target/product/j3y17lte/${{ env.FOX_ZIP_NAME }}
+        archive: false
+
+    - name: Uploading extra theme zips
+      uses: actions/upload-artifact@v5
+      with:
+        name: ofrp-extras
+        path: |
+          /home/runner/TWRP/out/target/product/j3y17lte/*.zip
+          !/home/runner/TWRP/out/target/product/j3y17lte/${{ env.FOX_ZIP_NAME }}
