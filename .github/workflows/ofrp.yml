@@ -85,6 +85,13 @@ jobs:
         mount /system 2>/dev/null
         mount -o ro /system 2>/dev/null
         
+        # Check aapt availability ONCE, not per-app - this device has FOX_REMOVE_AAPT=1
+        # so it's always absent, but the per-app "[ -x ... ]" check was still forking
+        # a subshell every single call on top of everything else, adding up across
+        # hundreds of system apps.
+        HAVE_AAPT=0
+        [ -x "$FOXAAPT" ] && HAVE_AAPT=1
+        
         add_entry() {
             local fullpath="$1"
             local tag="$2"
@@ -93,14 +100,18 @@ jobs:
             local label
             local display
         
-            parent="$(basename "$(dirname "$fullpath")")"
+            # basename/dirname via parameter expansion instead of external
+            # `basename`/`dirname` calls - each app was forking two extra
+            # processes here for no reason, and this runs hundreds of times.
+            local dir_only="${fullpath%/*}"
+            parent="${dir_only##*/}"
             case "$parent" in
-                base.apk|"") pkgname="$(basename "$fullpath" .apk)" ;;
-                *) pkgname="$(echo "$parent" | cut -d'-' -f1)" ;;
+                base.apk|"") pkgname="${fullpath##*/}"; pkgname="${pkgname%.apk}" ;;
+                *) pkgname="${parent%%-*}" ;;
             esac
             [ -z "$pkgname" ] && return
         
-            if [ -x "$FOXAAPT" ]; then
+            if [ "$HAVE_AAPT" = "1" ]; then
                 label="$("$FOXAAPT" dump badging "$fullpath" 2>/dev/null | grep "application-label:" | head -1 | cut -d"'" -f2)"
             fi
         
@@ -120,8 +131,12 @@ jobs:
                 fi
             fi
         
-            # filenames can't contain '/'; strip anything odd just in case a label has it
-            display="$(echo "$display" | tr '/' '-')"
+            # filenames can't contain '/'; parameter expansion can't do global
+            # replace portably across shells, so this one stays as tr, but only
+            # runs if a '/' is actually present to avoid the fork otherwise
+            case "$display" in
+                */*) display="$(echo "$display" | tr '/' '-')" ;;
+            esac
         
             # dedupe on package name so the same app isn't listed twice
             [ -e "$list_dir/$display" ] && return
@@ -134,7 +149,7 @@ jobs:
             # (/system/app, /system/priv-app) at the user's request - deleting a
             # system app folder here CAN break boot if it's something init/SystemUI
             # depends on. No extra confirmation beyond the normal swipe-to-confirm.
-            echo "$(dirname "$fullpath")" > "$list_dir/$display" 2>/dev/null
+            echo "$dir_only" > "$list_dir/$display" 2>/dev/null
         }
         
         scan_dir() {
