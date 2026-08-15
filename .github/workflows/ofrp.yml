@@ -62,15 +62,6 @@ jobs:
         #!/sbin/sh
         # fox_list_apps - patched
         #
-        # Confirmed from gui/theme/.../pages/advanced.xml (apps_list page): App
-        # Manager is a plain GUIFileSelector browsing amgr_path=/tmp/listapps/list.
-        # There is no text-file format to write - each installed app needs to be
-        # ONE entry (file, named however it should display) inside that directory.
-        # The original script wrote nothing there at all (broken ls/cut parsing),
-        # which is why the list was always empty regardless of what was installed.
-        #
-        # This version also scans /system/app and /system/priv-app in addition to
-        # /data/app, since the original only ever covered user-installed apps.
         
         FOXAAPT="/sbin/aapt"
         list_dir="/tmp/listapps/list"
