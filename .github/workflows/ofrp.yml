@@ -51,97 +51,89 @@ jobs:
         mkdir -p ~/fox-addons
         curl -L -o ~/fox-addons/Magisk-v30.7.zip https://github.com/topjohnwu/Magisk/releases/download/v30.7/Magisk-v30.7.apk
         echo "Saved to ~/fox-addons/Magisk-v30.7.zip — build step points FOX_USE_SPECIFIC_MAGISK_ZIP at this file"
-    - name: Patching fox_list_apps for old and new layouts
+    - name: Patching fox_list_apps for user + system apps
       run: |
         TARGET=$(find ~/TWRP -type f -path "*FoxExtras/sbin/fox_list_apps" 2>/dev/null | head -n1)
         if [ -z "$TARGET" ]; then
           echo "fox_list_apps not found in synced source — skipping patch, App Manager list may stay broken."
         else
           echo "Patching: $TARGET"
-          cat > "$TARGET" << 'FOXLISTAPPS_EOF'
+        cat > "$TARGET" << 'FOXLISTAPPS_EOF'
         #!/sbin/sh
+        # fox_list_apps - patched
         #
-        # Custom script for OrangeFox TWRP Recovery
-        # Copyright (C) 2018-2022 OrangeFox Recovery Project
+        # Confirmed from gui/theme/.../pages/advanced.xml (apps_list page): App
+        # Manager is a plain GUIFileSelector browsing amgr_path=/tmp/listapps/list.
+        # There is no text-file format to write - each installed app needs to be
+        # ONE entry (file, named however it should display) inside that directory.
+        # The original script wrote nothing there at all (broken ls/cut parsing),
+        # which is why the list was always empty regardless of what was installed.
         #
-        # This software is licensed under the terms of the GNU General Public
-        # License version 2, as published by the Free Software Foundation, and
-        # may be copied, distributed, and modified under those terms.
-        #
-        # This program is distributed in the hope that it will be useful,
-        # but WITHOUT ANY WARRANTY; without even the implied warranty of
-        # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-        # GNU General Public License for more details.
-        #
-        # See <http://www.gnu.org/licenses/>.
-        #
-        # Please maintain this if you use this script or any part of it
-        #
-        # --- MODIFIED: find-based scan supports both flat (/data/app/<pkg>-<hash>/base.apk)
-        # --- and nested (/data/app/~~<hash>==/<pkg>-<hash>==/base.apk) layouts.
-        #
-
-        is_mounted() {
-          [ -z "$1" ] && { echo "0"; return; }
-          grep -q " `readlink -f $1` " /proc/mounts 2>/dev/null
-          [ "$?" = "1" ] && echo "0" || echo "1"
+        # This version also scans /system/app and /system/priv-app in addition to
+        # /data/app, since the original only ever covered user-installed apps.
+        
+        FOXAAPT="/sbin/aapt"
+        list_dir="/tmp/listapps/list"
+        rm -rf /tmp/listapps
+        mkdir -p "$list_dir"
+        
+        add_entry() {
+            local fullpath="$1"
+            local tag="$2"
+            local parent
+            local pkgname
+            local label
+            local display
+        
+            parent="$(basename "$(dirname "$fullpath")")"
+            case "$parent" in
+                base.apk|"") pkgname="$(basename "$fullpath" .apk)" ;;
+                *) pkgname="$(echo "$parent" | cut -d'-' -f1)" ;;
+            esac
+            [ -z "$pkgname" ] && return
+        
+            if [ -x "$FOXAAPT" ]; then
+                label="$("$FOXAAPT" dump badging "$fullpath" 2>/dev/null | grep "application-label:" | head -1 | cut -d"'" -f2)"
+            fi
+            [ -z "$label" ] && label="$pkgname"
+        
+            if [ "$tag" = "system" ]; then
+                display="[System] ${label} (${pkgname})"
+            else
+                display="${label} (${pkgname})"
+            fi
+        
+            # filenames can't contain '/'; strip anything odd just in case a label has it
+            display="$(echo "$display" | tr '/' '-')"
+        
+            # dedupe on package name so the same app isn't listed twice
+            [ -e "$list_dir/$display" ] && return
+        
+            # advanced.xml's delete action does:
+            #   rm -rf "$(cat "%amgr_file%")"
+            # so each entry file must CONTAIN the real path to remove, not be empty.
+            # For an app dir like /data/app/pkg-hash/base.apk, that's the pkg-hash
+            # folder one level up from base.apk. This applies to system apps too
+            # (/system/app, /system/priv-app) at the user's request - deleting a
+            # system app folder here CAN break boot if it's something init/SystemUI
+            # depends on. No extra confirmation beyond the normal swipe-to-confirm.
+            echo "$(dirname "$fullpath")" > "$list_dir/$display" 2>/dev/null
         }
-
-        Do_Get_List() {
-        local AAPT1="/sbin/aapt"
-        local AAPT2="/sbin/aapt2"
-        local tmp="/tmp/listapps"
-        local list="$tmp/list"
-        local apps_dir="/data/app"
-        local namestr="application-label:'"
-        local d_mnt=$(is_mounted "/data")
-
-        	[ -d "$list" ] && return
-        	[ "$d_mnt" != "1" ] && mount /data
-
-        	mkdir -p "$tmp" "$list"
-
-        	if [ -f "$AAPT1" -o -f "$AAPT2" ]; then
-        	   AAPT="$AAPT1"
-        	   [ ! -f "$AAPT1" ] && AAPT="$AAPT2"
-        	   find "$apps_dir" -mindepth 1 -maxdepth 3 -name "base.apk" 2>/dev/null | while read -r apk; do
-        	       fullpath=$(dirname "$apk")
-        	       dirname_only=$(basename "$fullpath")
-        	       pkgname=$(echo "$dirname_only" | cut -d'-' -f1)
-        	       [ -z "$pkgname" ] && continue
-        	       name=$($AAPT dump badging "$apk" | grep "$namestr" | sed "s/"$namestr"//" | sed "s/'//" | sed "s/'//")
-        	       if [ -n "$name" -a -f "$list/$name" ]; then
-        		    echo "$fullpath" > "$list/$name ($pkgname)"
-        	       elif [ -n "$name" ]; then
-        		    echo "$fullpath" > "$list/$name"
-        	       else
-        		    echo "$fullpath" > "$list/$pkgname"
-        	       fi
-        	   done
-        	else
-        	   find "$apps_dir" -mindepth 1 -maxdepth 3 -name "base.apk" 2>/dev/null | while read -r apk; do
-        	       fullpath=$(dirname "$apk")
-        	       dirname_only=$(basename "$fullpath")
-        	       pkgname=$(echo "$dirname_only" | cut -d'-' -f1)
-        	       [ -z "$pkgname" ] && continue
-        	       echo "$fullpath" > "$list/$pkgname"
-        	   done
-        	fi
-
-        	exit 0
+        
+        scan_dir() {
+            local base_dir="$1"
+            local tag="$2"
+            [ -d "$base_dir" ] || return
+            find "$base_dir" -mindepth 1 -maxdepth 3 -iname "*.apk" 2>/dev/null | while read -r fullpath; do
+                add_entry "$fullpath" "$tag"
+            done
         }
-
-        Do_Cleanup() {
-          exit 0
-        }
-
-        #
-        if [ "$1" = "--cleanup" ]; then
-           Do_Cleanup
-        else
-           Do_Get_List
-        fi
-        #
+        
+        scan_dir "/data/app" "user"
+        scan_dir "/system/app" "system"
+        scan_dir "/system/priv-app" "system"
+        
+        exit 0
         FOXLISTAPPS_EOF
           chmod 755 "$TARGET"
           echo "Patched fox_list_apps successfully"
