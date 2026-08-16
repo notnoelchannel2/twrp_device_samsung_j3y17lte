@@ -39,21 +39,13 @@ jobs:
         java-version: '8'
     - name: Syncing TWRP sources
       run: |
-        mkdir -p ~/.bin
-        curl -o ~/.bin/repo https://storage.googleapis.com/git-repo-downloads/repo
-        chmod a+x ~/.bin/repo
-        export PATH=~/.bin:$PATH
         mkdir ~/TWRP
         cd ~/TWRP
-        # Switched to fox_9.0: matches the TWRP minimal-manifest's actual
-        # top branch (twrp-9.0 - confirmed there's no twrp-10.0), and
-        # unlike fox_10.0, gitlab.com/OrangeFox/Manifest.git still serves
-        # fox_9.0 directly (confirmed browsable with real commit history,
-        # even though the fox_10.0 ref and the bare Manifest project
-        # listing both 404 - looks like only 10.0+ got pruned from here).
-        repo init --depth=1 -u https://gitlab.com/OrangeFox/Manifest.git -b fox_9.0
-        repo sync
+        mkdir ~/.bin
+        curl http://commondatastorage.googleapis.com/git-repo-downloads/repo > ~/.bin/repo
+        python3 ~/.bin/repo init --depth=1 -u https://github.com/unlegacy-devices/fox-7.1_manifest.git -b fox-7.1
         git clone --branch android-6.0 --single-branch https://github.com/notnoelchannel2/twrp_device_samsung_j3y17lte.git ~/TWRP/device/samsung/j3y17lte
+        python3 ~/.bin/repo sync -c --force-sync --optimized-fetch --no-tags --no-clone-bundle --prune -j$(nproc --all)
     - name: Downloading Magisk v30.7 for Fox Addons
       run: |
         mkdir -p ~/fox-addons
