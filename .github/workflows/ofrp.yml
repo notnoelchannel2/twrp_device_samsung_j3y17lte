@@ -56,6 +56,11 @@ jobs:
         git clone https://github.com/XenonTheInertG/ofox-sync.git ~/ofox-sync
         cd ~/ofox-sync
         chmod +x get_fox_10.sh
+        # get_fox_10.sh hardcodes the minimal-manifest clone over git://,
+        # which uses raw port 9418 - GitHub Actions runners can't reach it
+        # (times out, confirmed by an earlier failed run here). Repoint it
+        # at https:// instead, same repo and branch, just a routable protocol.
+        sed -i 's#git://github.com/minimal-manifest-twrp/platform_manifest_twrp_omni.git#https://github.com/minimal-manifest-twrp/platform_manifest_twrp_omni.git#' get_fox_10.sh
         ./get_fox_10.sh ~/TWRP/fox_10.0
         # get_fox_10.sh checks out the fox_10.0 *branch* head, not a pinned
         # release. Pin bootable/Recovery to the R10.1 tag specifically -
